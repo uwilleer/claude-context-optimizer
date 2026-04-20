@@ -1,0 +1,9 @@
+{
+  "name": "claude-context-optimizer",
+  "description": "Shell-hook + permission tweaks + context-discipline skill to reduce Claude Code's baseline token footprint. Ships simplify-ignore block protection and a compact-threshold reminder.",
+  "version": "0.2.0",
+  "author": {
+    "name": "uwilleer"
+  },
+  "homepage": "https://github.com/uwilleer/claude-context-optimizer"
+}
