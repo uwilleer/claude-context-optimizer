@@ -1,57 +1,120 @@
 # claude-context-optimizer
 
-Hooks, settings template, and global instructions for reducing Claude Code's token footprint. Extracted from a real-world optimization session that cut baseline context by ~30%.
+Reduce Claude Code's **baseline** token footprint via shell hooks, permissions tweaks, and a context-discipline skill. Includes a standalone transcript analyzer so you can measure your own savings before trusting mine.
 
-## What's inside
+**What this is:** simple, transparent, file-level — hooks + settings + guidelines. No MCP server, no vector DB, no runtime compression.
 
+**What this isn't:** a semantic code-retriever. For runtime compression (40–99%) see [lean-ctx](https://github.com/) and [zilliztech/claude-context](https://github.com/zilliztech/claude-context). They reduce **runtime** context; this repo reduces **baseline** and **enforces discipline**. Complementary, not competing.
+
+---
+
+## Is this for you?
+
+**Likely yes** if:
+- Your `/context` shows a baseline ≥ 40k tokens.
+- You run multi-hour Claude Code sessions that grow past 100k messages.
+- You have many CLAUDE.md files, many plugins, or large memory indexes.
+- You've caught the model using `grep`/`cat`/`ls` via Bash when Grep/Read/Glob would do.
+
+**Likely no** if:
+- Your sessions are short and baseline already < 30k.
+- You need semantic/embedding-based code retrieval — use an MCP tool.
+- You don't use Claude Code's hook system.
+
+**Don't trust claims — measure.** See _Measure first_ below.
+
+---
+
+## Measure first (no install needed)
+
+`scripts/analyze-transcript.py` is a standalone diagnostic that reads any Claude Code session jsonl and tells you where your tokens go.
+
+```bash
+# Clone or download just the script
+curl -O https://raw.githubusercontent.com/uwilleer/claude-context-optimizer/main/scripts/analyze-transcript.py
+chmod +x analyze-transcript.py
+
+# Analyze your largest recent session
+python3 analyze-transcript.py --top 1
 ```
-.
-├── global/
-│   ├── CLAUDE.md               # Global behavioral guidelines (~/.claude/CLAUDE.md)
-│   └── settings.template.json  # Starter ~/.claude/settings.json
-├── hooks/
-│   ├── compact-threshold.sh    # Stop-hook: nag about /compact at N input tokens
-│   ├── simplify-ignore.sh      # Hide marked code blocks from the model during edits
-│   ├── simplify-ignore-test.sh # Test suite for simplify-ignore
-│   └── SIMPLIFY-IGNORE.md      # Docs for simplify-ignore
-├── scripts/
-│   └── sync-to-repo.sh         # Pull live ~/.claude edits back into your fork
-└── README.md
-```
+
+Output is a markdown report:
+
+- Event-type byte breakdown (assistant / user / attachment / file-history-snapshot).
+- Top-10 largest `tool_results` with tool attribution.
+- Tool-use distribution.
+- Top 25 Bash command prefixes — exposes `grep`/`cat`/`ls` calls that should be redirected to dedicated tools.
+- `hook_success` attachment overhead (how much hook-noise you're paying).
+- Peak context from `usage` fields.
+- Actionable recommendations (e.g. "132 raw Bash grep/cat calls — add to permissions.deny").
+
+No dependencies beyond Python stdlib. Does not require this plugin to be installed.
+
+---
 
 ## Install
 
+### Option A: as a Claude Code plugin (recommended)
+
 ```bash
-git clone git@github.com:<you>/claude-context-optimizer.git
+/plugin install uwilleer/claude-context-optimizer
+```
+
+The plugin auto-wires:
+
+- `hooks/compact-threshold.sh` on the Stop event — nags about `/compact` when input tokens exceed 100k (configurable via `CLAUDE_COMPACT_THRESHOLD`).
+- `hooks/simplify-ignore.sh` on Read / Edit / Write / Stop — hides `simplify-ignore-start`/`simplify-ignore-end` blocks from the model.
+- `skills/context-discipline` — describes the 80k-token pre-emptive compact rule, loaded into sessions proactively.
+
+### Option B: manual merge
+
+For users who prefer to own their `~/.claude/settings.json`:
+
+```bash
+git clone git@github.com:uwilleer/claude-context-optimizer.git
 cd claude-context-optimizer
 
-# Hooks
-mkdir -p ~/.claude/hooks
-cp hooks/*.sh ~/.claude/hooks/
+# Copy hooks
+mkdir -p ~/.claude/hooks && cp hooks/*.sh ~/.claude/hooks/
 chmod +x ~/.claude/hooks/*.sh
 
-# Settings (merge with your existing ~/.claude/settings.json — do NOT overwrite blindly)
+# Review the settings template and merge selectively
 diff -u ~/.claude/settings.json global/settings.template.json | less
 
-# Global instructions (merge into your ~/.claude/CLAUDE.md)
+# Review guidelines and merge
 diff -u ~/.claude/CLAUDE.md global/CLAUDE.md | less
 ```
 
 The template uses `${HOME}` placeholders; your real `~/.claude/settings.json` needs literal paths.
 
-## Hooks
+---
+
+## Comparison with alternatives
+
+| Tool | Approach | Scope | Complexity | Unique value |
+|---|---|---|---|---|
+| **claude-context-optimizer** (this) | Shell hooks + permissions + guidelines | Baseline + discipline | Low — 4 files, readable bash/python | Transparent; includes a diagnostic analyzer |
+| [lean-ctx](https://github.com/) | MCP server + token-dense-dialect compression | Runtime context | High — MCP setup | Up to 99% compression on tool outputs |
+| [zilliztech/claude-context](https://github.com/zilliztech/claude-context) | MCP server + vector DB | Semantic code retrieval | High — vector DB ops | Embedding-based relevant-file lookup |
+| context-mode | MCP server | Runtime tool output trimming | Medium | Focused on tool-output bloat |
+
+None of these replace each other. This repo pairs naturally with an MCP compression tool if you want both baseline savings and runtime compression.
+
+---
+
+## What's in the hooks
 
 ### `compact-threshold.sh`
 
-**Stop-hook.** Reads the transcript's last `usage` block, sums `cache_read_input_tokens + cache_creation_input_tokens + input_tokens`, and prints a reminder when the total exceeds a threshold (default 100000, override via `CLAUDE_COMPACT_THRESHOLD`).
+Stop-hook. Parses the transcript, sums `cache_read_input_tokens + cache_creation_input_tokens + input_tokens` from the newest `usage` block, and emits a stderr reminder when the total exceeds the threshold.
 
-Why: Claude Code's built-in auto-compact kicks in very late. Earlier compact = better quality + lower cost on long sessions.
+- Default threshold: **100,000** input tokens.
+- Override: `CLAUDE_COMPACT_THRESHOLD=80000`.
+- Zero cost when below threshold (silent `exit 0`).
 
 ### `simplify-ignore.sh`
 
-**PreToolUse(Read) / PostToolUse(Edit|Write) / Stop-hook.** Replaces marked blocks with `BLOCK_<hash>` placeholders before the model reads a file, then restores the real code afterwards. Lets you protect performance-critical or intentionally-weird code from `/code-simplify` and similar refactor loops.
-
-Mark with any comment style:
+PreToolUse(Read) / PostToolUse(Edit|Write) / Stop-hook. Protects code blocks from `/code-simplify` and similar refactor passes by hiding them from the model's view of the file and restoring them afterwards.
 
 ```js
 /* simplify-ignore-start: perf-critical */
@@ -60,35 +123,25 @@ result[1] = buf[1] ^ key[1];
 /* simplify-ignore-end */
 ```
 
-See [`hooks/SIMPLIFY-IGNORE.md`](hooks/SIMPLIFY-IGNORE.md) for full docs.
+The model sees only `/* BLOCK_<hash>: perf-critical */` when reading. Edits to surrounding code are preserved; the protected block round-trips intact. See [hooks/SIMPLIFY-IGNORE.md](hooks/SIMPLIFY-IGNORE.md) for details.
 
-## Settings template highlights
+---
 
-- `permissions.deny` for `grep/rg/cat/head/tail/find/ls` — forces the model to use dedicated tools (`Grep`, `Read`, `Glob`) instead of Bash. Shorter, more structured tool results.
-- Stop-hook chain wired up for both `simplify-ignore.sh` and `compact-threshold.sh`.
-- `defaultMode: "auto"` and `additionalDirectories` set to a typical `~/programming` layout — adjust to your workspace.
+## Limits & caveats
 
-## Context Budget guideline
+- **Effect is workflow-dependent.** The author's baseline dropped 32% (54.4k → 37.2k). Yours will differ. Run the analyzer first.
+- **Hook schema may shift.** Claude Code updates can change hook input/output formats. Pin your plugin version in production sessions; watch CHANGELOG.
+- **Permissions denials are visible to you.** The first time the model hits a `deny` rule, you get a permission prompt. Approve once, done.
+- **`simplify-ignore.sh` writes backups to `.claude/.simplify-ignore-cache/`.** Make sure this path is in your `.gitignore`.
+- **Not a replacement for discipline.** Hooks nag; you decide. If you habitually dump 50k-line logs into tool_results, no config will save you.
 
-Added to `global/CLAUDE.md`:
-
-> Active context ≈ `cache_read + cache_creation + input_tokens`. When it reaches ~80k, stop and suggest `/compact` before the next non-trivial action.
-
-Paired with `compact-threshold.sh` at 100k, this gives you ~20k of runway between the model's self-nudge and the hook's hard reminder.
-
-## Scripts
-
-`sync-to-repo.sh` pulls your current `~/.claude/CLAUDE.md`, `settings.json`, and statusline back into this repo's `global/` directory with `$HOME`/`$USER` substituted by placeholders. Run it to capture manual changes before committing.
-
-```bash
-bash scripts/sync-to-repo.sh --dry-run   # preview
-bash scripts/sync-to-repo.sh             # apply
-```
+---
 
 ## Requirements
 
-- `jq`, `python3`, `bash 3.2+`
-- `shasum` or `sha1sum` (for `simplify-ignore.sh`)
+- `bash 3.2+`, `jq`, `python3` (for analyzer and `compact-threshold.sh`).
+- `shasum` or `sha1sum` (for `simplify-ignore.sh`).
+- Claude Code with plugin support (tested April 2026).
 
 ## License
 
@@ -98,4 +151,4 @@ MIT — see [LICENSE](LICENSE).
 
 - Global guidelines sections 1–4 adapted from [Karpathy-inspired skills](https://github.com/forrestchang/andrej-karpathy-skills).
 - Sections 5–7 from [Anthropic prompt-engineering docs](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/claude-4-best-practices).
-- Section 8 (release discipline) and hooks are original work.
+- Section 8 (release discipline), hooks, and the analyzer are original work.
