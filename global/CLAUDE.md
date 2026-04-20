@@ -2,6 +2,8 @@
 
 Behavioral guidelines to reduce common LLM coding mistakes and keep responses efficient. Merge with project-specific instructions as needed.
 
+> **Plugin users:** the Context Budget section below is also available as the `context-discipline` skill that auto-loads when you install `claude-context-optimizer` as a plugin. This file remains for users who prefer manual `~/.claude/CLAUDE.md` merging.
+
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
 ## 0. Context Budget
