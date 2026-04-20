@@ -1,0 +1,68 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(${HOME}/programming/**)",
+      "Bash(bat *)",
+      "Bash(git show *)",
+      "Bash(git log *)",
+      "Bash(git diff *)",
+      "Bash(git status*)",
+      "Bash(git blame *)",
+      "Bash(git grep *)",
+      "Bash(sed *)",
+      "Bash(awk *)",
+      "Bash(tree *)",
+      "Bash(wc *)",
+      "Bash(diff *)",
+      "Bash(stat *)",
+      "Bash(file *)",
+      "Bash(echo *)",
+      "Bash(pwd)",
+      "Bash(which *)",
+      "Bash(type *)",
+      "Bash(env)",
+      "Bash(printenv *)",
+      "Bash(jq *)"
+    ],
+    "deny": [
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(find *)",
+      "Bash(ls *)",
+      "Bash(ls)"
+    ],
+    "defaultMode": "auto",
+    "additionalDirectories": [
+      "${HOME}/programming"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          { "type": "command", "command": "bash ${HOME}/.claude/hooks/simplify-ignore.sh" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "bash ${HOME}/.claude/hooks/simplify-ignore.sh" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash ${HOME}/.claude/hooks/simplify-ignore.sh" },
+          { "type": "command", "command": "bash ${HOME}/.claude/hooks/compact-threshold.sh" }
+        ]
+      }
+    ]
+  }
+}
