@@ -50,6 +50,61 @@ Output is a markdown report:
 
 No dependencies beyond Python stdlib. Does not require this plugin to be installed.
 
+### Real-world example
+
+Ran on one actual 16.8 MB session (proxy VPN project, ~2 months of iterative work):
+
+```
+# Transcript analysis: `215f15c9-….jsonl`
+
+- Size: 16,777 KB across 10,922 lines
+- Peak context: 689,267 input tokens
+  (cache_read=686,897, cache_creation=2,365, input=5)
+- hook_success attachments: 3,374 events, 2,213.7 KB
+```
+
+**Event types (top, by bytes):**
+
+| type | count | MB |
+|---|---|---|
+| assistant | 2,976 | 6.09 |
+| user | 1,890 | 5.27 |
+| attachment | 3,812 | 3.33 |
+| file-history-snapshot | 277 | 1.25 |
+
+**Top 7 Bash command prefixes:**
+
+| count | prefix | notes |
+|---|---|---|
+| 290 | `ssh` | logs/remote inspection, mostly unbounded |
+| 95 | `gh` | fine, dedicated tool |
+| **64** | `grep` | **should be `Grep` tool** |
+| **38** | `ls` | **should be `Glob` tool** |
+| **31** | `cat` | **should be `Read` tool** |
+| 39 | `git add` | fine |
+| 33 | `echo` | fine |
+
+**Recommendations the script emitted:**
+
+> - **133 raw Bash calls** to `grep`×64, `cat`×31, `ls`×38 — add to `permissions.deny` and let the model switch to Grep/Read/Glob. Est. save 1–2 KB per avoided call.
+> - **3,374 hook_success attachments** (~640 B each, total 2,213 KB). Audit each hook: does it really need to run on every tool call?
+> - **Peak context 689,267 tokens** — you're past the comfortable compact window. Next time, run `/compact` around 80–100k.
+
+### What changed after applying the plugin
+
+On the author's daily project, `/context` before/after:
+
+| Category | Before | After | Δ |
+|---|---|---|---|
+| Memory files (CLAUDE.md + index) | 18.9k | 7.0k | **−63%** |
+| Custom agents | 6.2k | 4.5k | −27% |
+| Skills | 5.6k | 3.7k | −34% |
+| System tools (MCP) | 15.0k | 13.0k | −13% |
+| System prompt | 8.7k | 8.7k | 0% |
+| **Baseline total** | **54.4k** | **37.2k** | **−32%** |
+
+One person's workflow, one project. Your mileage will vary — run the analyzer on your own session to see what's recoverable for you.
+
 ---
 
 ## Install
