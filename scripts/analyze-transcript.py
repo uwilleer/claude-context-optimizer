@@ -18,11 +18,9 @@ claude-context-optimizer plugin to be installed.
 
 import argparse
 import json
-import re
 import sys
 from collections import Counter
 from pathlib import Path
-
 
 # ---------- discovery ----------
 

@@ -1,7 +1,7 @@
 {
+  "_comment": "Template — copy to ~/.claude/settings.json and customise. Add your own Read() globs and additionalDirectories for the repos you actually work in.",
   "permissions": {
     "allow": [
-      "Read(${HOME}/programming/**)",
       "Bash(bat *)",
       "Bash(git show *)",
       "Bash(git log *)",
@@ -28,16 +28,12 @@
       "Bash(grep *)",
       "Bash(rg *)",
       "Bash(cat *)",
-      "Bash(head *)",
-      "Bash(tail *)",
       "Bash(find *)",
       "Bash(ls *)",
       "Bash(ls)"
     ],
     "defaultMode": "auto",
-    "additionalDirectories": [
-      "${HOME}/programming"
-    ]
+    "additionalDirectories": []
   },
   "hooks": {
     "PreToolUse": [
@@ -51,6 +47,13 @@
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "bash ${HOME}/.claude/hooks/simplify-ignore.sh" }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
         "hooks": [
           { "type": "command", "command": "bash ${HOME}/.claude/hooks/simplify-ignore.sh" }
         ]

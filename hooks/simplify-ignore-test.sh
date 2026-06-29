@@ -66,7 +66,7 @@ assert_eq "exactly one placeholder line" "1" "$placeholder_count"
 assert_eq "line before block preserved" "1" "$(grep -c 'const a = 1' "$DEST")"
 assert_eq "line after block preserved" "1" "$(grep -c 'const b = 2' "$DEST")"
 
-block_files=$(ls "$CACHE/${FID}".block.* 2>/dev/null | wc -l | tr -d ' ')
+block_files=$(find "$CACHE" -maxdepth 1 -name "${FID}.block.*" 2>/dev/null | wc -l | tr -d ' ')
 assert_eq "one block file in cache" "1" "$block_files"
 
 block_content=$(cat "$CACHE/${FID}".block.*)
@@ -122,7 +122,7 @@ filter_file "$SRC" "$DEST" "$FID"
 placeholder_count=$(grep -c 'BLOCK_' "$DEST")
 assert_eq "two placeholders for two blocks" "2" "$placeholder_count"
 
-block_files=$(ls "$CACHE/${FID}".block.* 2>/dev/null | wc -l | tr -d ' ')
+block_files=$(find "$CACHE" -maxdepth 1 -name "${FID}.block.*" 2>/dev/null | wc -l | tr -d ' ')
 assert_eq "two block files in cache" "2" "$block_files"
 
 # ── Test 4: Reason string preserved ──────────────────────────────────────
@@ -142,7 +142,7 @@ filter_file "$SRC" "$DEST" "$FID"
 
 assert_eq "placeholder includes reason" "1" "$(grep -c 'perf-critical' "$DEST")"
 
-reason_files=$(ls "$CACHE/${FID}".reason.* 2>/dev/null | wc -l | tr -d ' ')
+reason_files=$(find "$CACHE" -maxdepth 1 -name "${FID}.reason.*" 2>/dev/null | wc -l | tr -d ' ')
 assert_eq "reason file saved" "1" "$reason_files"
 assert_eq "reason content" "perf-critical" "$(cat "$CACHE/${FID}".reason.*)"
 

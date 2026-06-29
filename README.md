@@ -1,5 +1,7 @@
 # claude-context-optimizer
 
+[![CI](https://github.com/uwilleer/claude-context-optimizer/actions/workflows/ci.yml/badge.svg)](https://github.com/uwilleer/claude-context-optimizer/actions/workflows/ci.yml)
+
 Reduce Claude Code's **baseline** token footprint via shell hooks, permissions tweaks, and a context-discipline skill. Includes a standalone transcript analyzer so you can measure your own savings before trusting mine.
 
 **What this is:** simple, transparent, file-level — hooks + settings + guidelines. No MCP server, no vector DB, no runtime compression.
@@ -117,8 +119,8 @@ One person's workflow, one project. Your mileage will vary — run the analyzer 
 
 The plugin auto-wires:
 
-- `hooks/compact-threshold.sh` on the Stop event — nags about `/compact` when input tokens exceed 100k (configurable via `CLAUDE_COMPACT_THRESHOLD`).
-- `hooks/simplify-ignore.sh` on Read / Edit / Write / Stop — hides `simplify-ignore-start`/`simplify-ignore-end` blocks from the model.
+- `hooks/compact-threshold.sh` on the Stop event — nags about `/compact` when input tokens exceed 80k (configurable via `CLAUDE_COMPACT_THRESHOLD`).
+- `hooks/simplify-ignore.sh` on Read / Edit / Write / SessionStart / Stop — hides protected blocks from the model and restores them afterwards.
 - `skills/context-discipline` — describes the 80k-token pre-emptive compact rule, loaded into sessions proactively.
 
 ### Option B: manual merge
@@ -163,8 +165,8 @@ None of these replace each other. This repo pairs naturally with an MCP compress
 
 Stop-hook. Parses the transcript, sums `cache_read_input_tokens + cache_creation_input_tokens + input_tokens` from the newest `usage` block, and emits a stderr reminder when the total exceeds the threshold.
 
-- Default threshold: **100,000** input tokens.
-- Override: `CLAUDE_COMPACT_THRESHOLD=80000`.
+- Default threshold: **80,000** input tokens (matches the `/compact` rule in `skills/context-discipline`).
+- Override: `CLAUDE_COMPACT_THRESHOLD=100000`.
 - Zero cost when below threshold (silent `exit 0`).
 
 ### `simplify-ignore.sh`
@@ -192,9 +194,48 @@ The model sees only `/* BLOCK_<hash>: perf-critical */` when reading. Edits to s
 
 ---
 
+## Risks & recovery
+
+`simplify-ignore.sh` is the only component that **modifies source files on disk**. Before enabling it, understand:
+
+1. **What actually happens on Read.** When the model reads a file containing `simplify-ignore-start`, the hook replaces the block with `BLOCK_<hash>` placeholders **in the file on disk**, then saves a backup to `.claude/.simplify-ignore-cache/<id>.bak`. On `Stop`, the original is restored. Between Read and Stop, git will show dirty placeholder lines if you diff from outside the session.
+
+2. **If Claude Code crashes before Stop**, files stay with placeholders on disk. Recovery options:
+   - Automatic: the `SessionStart` hook (wired in `settings.template.json` v0.3+) restores backups at the next session launch.
+   - Manual: `echo '{}' | bash hooks/simplify-ignore.sh` once — restores all backups from `.claude/.simplify-ignore-cache/`.
+
+3. **Parallel Claude Code sessions in the same project will corrupt each other's backups.** The cache is project-scoped, not session-scoped. Run only one active session per project while this hook is enabled.
+
+4. **Do not commit the cache.** Add `.claude/.simplify-ignore-cache/` to `.gitignore`:
+
+   ```
+   .claude/.simplify-ignore-cache/
+   ```
+
+If you only want the transcript analyzer and `compact-threshold.sh`, leave the `simplify-ignore` hooks out of your settings.
+
+---
+
+## Uninstall
+
+```bash
+# Plugin install
+/plugin uninstall claude-context-optimizer
+
+# Manual install
+rm ~/.claude/hooks/compact-threshold.sh
+rm ~/.claude/hooks/simplify-ignore.sh
+rm -rf ~/.claude/skills/context-discipline
+rm -rf <project>/.claude/.simplify-ignore-cache/
+# Then remove the hooks[] and permissions deny/allow entries you added from
+# global/settings.template.json out of ~/.claude/settings.json.
+```
+
+---
+
 ## Requirements
 
-- `bash 3.2+`, `jq`, `python3` (for analyzer and `compact-threshold.sh`).
+- `bash 3.2+`, `jq`. `python3` is only needed for `scripts/analyze-transcript.py`; hooks do not require it.
 - `shasum` or `sha1sum` (for `simplify-ignore.sh`).
 - Claude Code with plugin support (tested April 2026).
 
