@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run shellcheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y shellcheck
+          shellcheck hooks/*.sh scripts/*.sh
+
+  simplify-ignore-tests:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install jq (macOS)
+        if: runner.os == 'macOS'
+        run: brew install jq || true
+      - name: Install jq (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y jq
+      - name: Run simplify-ignore test suite
+        run: bash hooks/simplify-ignore-test.sh
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - name: Python syntax check
+        run: python3 -m py_compile scripts/analyze-transcript.py
+      - name: Lint (ruff)
+        run: uv run --with ruff ruff check scripts/ tests/
+      - name: Tests (pytest)
+        run: uv run --with pytest pytest tests/ -v
+
+  template-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: settings template must not contain author-specific paths
+        run: |
+          if grep -E '\$\{HOME\}/programming|/Users/[a-z]+' global/settings.template.json; then
+            echo "::error::settings.template.json contains hard-coded personal paths"
+            exit 1
+          fi
